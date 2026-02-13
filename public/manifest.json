@@ -1,0 +1,32 @@
+{
+  "name": "Viewport Resizer",
+  "version": "1.0.0",
+  "manifest_version": 3,
+  "description": "Resize the current browser window for responsive UI testing.",
+  "minimum_chrome_version": "88",
+  "permissions": ["storage", "windows"],
+  "host_permissions": ["<all_urls>"],
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content/index.js"],
+      "run_at": "document_end"
+    }
+  ],
+  "action": {
+    "default_icon": {
+      "16": "icons/16.png",
+      "32": "icons/32.png",
+      "48": "icons/48.png",
+      "128": "icons/128.png"
+    },
+    "default_popup": "src/popup/index.html",
+    "default_title": "Viewport Resizer"
+  },
+  "icons": {
+    "16": "icons/16.png",
+    "32": "icons/32.png",
+    "48": "icons/48.png",
+    "128": "icons/128.png"
+  }
+}

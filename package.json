@@ -1,0 +1,35 @@
+{
+  "name": "viewport-resizer-extension",
+  "version": "1.0.0",
+  "description": "Browser extension to quickly resize current window for responsive testing.",
+  "keywords": [],
+  "homepage": "",
+  "bugs": {
+    "url": ""
+  },
+  "repository": {
+    "type": "git",
+    "url": ""
+  },
+  "funding": "",
+  "license": "ISC",
+  "author": "",
+  "main": "index.js",
+  "scripts": {
+    "build": "vite build",
+    "dev": "vite build --watch",
+    "lint": "biome check .",
+    "lint:fix": "biome format --write . && biome check --write .",
+    "preview": "vite preview",
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "lint:ci": "biome check ."
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.3.13",
+    "@types/chrome": "^0.1.6",
+    "@types/node": "^24.3.1",
+    "typescript": "^5.9.2",
+    "vite": "^7.1.4"
+  },
+  "packageManager": "pnpm@10.15.0"
+}
