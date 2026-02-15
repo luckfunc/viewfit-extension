@@ -1,4 +1,5 @@
 export const MEASURE_VIEWPORT_MESSAGE = 'MEASURE_VIEWPORT';
+export const APPLY_RESIZE_MESSAGE = 'APPLY_RESIZE';
 
 export type CalibrationMode = 'calibrated' | 'fallback';
 export type PopupStatusVariant = 'success' | 'error' | 'info';
@@ -13,6 +14,11 @@ export interface SizePreset {
 export interface ResizeInput {
   width: number;
   height: number;
+}
+
+export interface ResizeTarget {
+  windowId: number;
+  tabId?: number;
 }
 
 export interface ViewportMetrics {
@@ -31,3 +37,20 @@ export interface ResizeResult {
   mode: CalibrationMode;
   message: string;
 }
+
+export interface ApplyResizePayload {
+  input: ResizeInput;
+  target?: ResizeTarget;
+}
+
+export interface ApplyResizeSuccessResponse {
+  ok: true;
+  result: ResizeResult;
+}
+
+export interface ApplyResizeErrorResponse {
+  ok: false;
+  error: string;
+}
+
+export type ApplyResizeResponse = ApplyResizeSuccessResponse | ApplyResizeErrorResponse;

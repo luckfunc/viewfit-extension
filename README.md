@@ -1,23 +1,43 @@
 # Viewport Resizer Extension
 
-A Chrome/Edge (MV3) extension for responsive testing. It resizes the **current browser window** to target viewport sizes with a calibration pass.
+A Chrome/Edge (MV3) extension for responsive testing. It resizes the current browser window to a target viewport size and runs calibration to get closer to the requested result.
 
 ## Features
 
-- Device presets + custom width/height inputs
-- Automatic fallback from maximized/fullscreen to normal before resize
-- Calibrated viewport mode (with one correction pass)
-- Fallback mode for restricted pages (e.g. pages where content script cannot run)
-- Geek/GitHub-style popup UI (light + dark)
+- Built-in preset library for mobile/tablet/desktop sizes
+- Custom presets (save/remove) with local persistence
+- Background resize workflow (Service Worker) so resize can continue even if popup closes
+- Automatic window state normalization (restores fullscreen/maximized windows before resizing)
+- Calibrated mode with iterative viewport correction
+- Fallback mode when viewport metrics are unavailable on the current page
+
+## Architecture (Current)
+
+- `src/popup`: UI, preset management, input validation, and request dispatch
+- `src/background`: receives resize requests and executes resize jobs
+- `src/content`: returns viewport metrics (`innerWidth/innerHeight`)
+- `src/shared`: shared types, presets, and resize core logic
 
 ## Development
 
 ```bash
 pnpm install
+pnpm run lint
 pnpm run build
 ```
 
-Load `/dist` as an unpacked extension in Chrome/Edge.
+Useful commands:
+
+- `pnpm run dev` - watch build output
+- `pnpm run lint:fix` - auto format and fix lint issues
+
+## Load in Browser
+
+1. Build the project: `pnpm run build`
+2. Open `chrome://extensions` (or Edge equivalent)
+3. Enable `Developer mode`
+4. Click `Load unpacked`
+5. Select the `dist` folder
 
 ## Fonts
 
@@ -26,4 +46,4 @@ Popup fonts are loaded from:
 - `public/fonts/ibm-plex-sans-var.woff2`
 - `public/fonts/jetbrains-mono-var.woff2`
 
-You can replace these files with your preferred font binaries at any time.
+You can replace these files with your preferred font binaries.

@@ -4,6 +4,10 @@
   "manifest_version": 3,
   "description": "Resize the current browser window for responsive UI testing.",
   "minimum_chrome_version": "88",
+  "background": {
+    "service_worker": "background/index.js",
+    "type": "module"
+  },
   "permissions": ["storage", "windows"],
   "host_permissions": ["<all_urls>"],
   "content_scripts": [

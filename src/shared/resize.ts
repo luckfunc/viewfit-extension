@@ -1,6 +1,7 @@
 import {
   MEASURE_VIEWPORT_MESSAGE,
   type ResizeInput,
+  type ResizeTarget,
   type ResizeResult,
   type ViewportMetrics,
 } from './types';
@@ -10,9 +11,19 @@ const MAX_CALIBRATION_PASSES = 6;
 const MIN_WINDOW_SIZE_PX = 200;
 const MAX_REASONABLE_RESERVED_WIDTH_PX = 220;
 const MAX_REASONABLE_RESERVED_HEIGHT_PX = 260;
+const WINDOW_STATE_SETTLE_TIMEOUT_MS = 1600;
+const WINDOW_STATE_POLL_INTERVAL_MS = 80;
+const VIEWPORT_SETTLE_DELAY_MS = 70;
+const MAX_VIEWPORT_MEASURE_ATTEMPTS = 4;
 
 function getRuntimeError(): string | undefined {
   return chrome.runtime.lastError?.message;
+}
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
 }
 
 function clampSize(value: number): number {
@@ -120,7 +131,54 @@ function requestViewportMetrics(tabId: number | undefined): Promise<ViewportMetr
   });
 }
 
-async function resolveResizeTarget(): Promise<{ window: chrome.windows.Window; tabId?: number }> {
+function hasSameViewportSize(left: ViewportMetrics, right: ViewportMetrics): boolean {
+  return left.innerWidth === right.innerWidth && left.innerHeight === right.innerHeight;
+}
+
+async function requestStableViewportMetrics(
+  tabId: number | undefined,
+): Promise<ViewportMetrics | undefined> {
+  if (tabId === undefined) {
+    return undefined;
+  }
+
+  let lastMetrics: ViewportMetrics | undefined;
+
+  for (let attempt = 0; attempt < MAX_VIEWPORT_MEASURE_ATTEMPTS; attempt += 1) {
+    const metrics = await requestViewportMetrics(tabId);
+    if (!metrics) {
+      if (attempt < MAX_VIEWPORT_MEASURE_ATTEMPTS - 1) {
+        await delay(VIEWPORT_SETTLE_DELAY_MS);
+      }
+      continue;
+    }
+
+    if (lastMetrics && hasSameViewportSize(lastMetrics, metrics)) {
+      return metrics;
+    }
+
+    lastMetrics = metrics;
+
+    if (attempt < MAX_VIEWPORT_MEASURE_ATTEMPTS - 1) {
+      await delay(VIEWPORT_SETTLE_DELAY_MS);
+    }
+  }
+
+  return lastMetrics;
+}
+
+async function resolveResizeTarget(
+  preferredTarget?: ResizeTarget,
+): Promise<{ window: chrome.windows.Window; tabId?: number }> {
+  if (preferredTarget) {
+    try {
+      const preferredWindow = await getWindowById(preferredTarget.windowId);
+      return { window: preferredWindow, tabId: preferredTarget.tabId };
+    } catch {
+      throw new Error('Original target window is no longer available. Reopen popup and retry.');
+    }
+  }
+
   const activeTab = await queryActiveTab();
 
   if (activeTab?.windowId !== undefined) {
@@ -142,7 +200,23 @@ async function ensureNormalWindow(
     return windowInfo;
   }
 
-  return updateWindow(windowInfo.id, { state: 'normal' });
+  await updateWindow(windowInfo.id, { state: 'normal' });
+
+  const deadline = Date.now() + WINDOW_STATE_SETTLE_TIMEOUT_MS;
+  let latestWindowInfo = await getWindowById(windowInfo.id);
+
+  while (latestWindowInfo.state && latestWindowInfo.state !== 'normal' && Date.now() < deadline) {
+    await delay(WINDOW_STATE_POLL_INTERVAL_MS);
+    latestWindowInfo = await getWindowById(windowInfo.id);
+  }
+
+  if (latestWindowInfo.state && latestWindowInfo.state !== 'normal') {
+    throw new Error(
+      'Unable to exit fullscreen/maximized state automatically. Please exit it and retry.',
+    );
+  }
+
+  return latestWindowInfo;
 }
 
 function createFallbackResult(
@@ -155,17 +229,33 @@ function createFallbackResult(
     requested,
     appliedWindow,
     mode: 'fallback',
-    message: `Applied window size ${formatSize(appliedWindow)} (${reason}).`,
+    message: `Resize applied in fallback mode: ${reason}.`,
   };
 }
 
-export async function applyViewportResize(rawInput: ResizeInput): Promise<ResizeResult> {
+async function applyFallbackWindowResize(
+  windowId: number,
+  requested: ResizeInput,
+  reason: string,
+): Promise<ResizeResult> {
+  const fallbackWindow = await updateWindow(windowId, {
+    width: requested.width,
+    height: requested.height,
+  });
+
+  return createFallbackResult(requested, extractWindowSize(fallbackWindow, requested), reason);
+}
+
+export async function applyViewportResize(
+  rawInput: ResizeInput,
+  preferredTarget?: ResizeTarget,
+): Promise<ResizeResult> {
   const requested: ResizeInput = {
     width: clampSize(rawInput.width),
     height: clampSize(rawInput.height),
   };
 
-  const target = await resolveResizeTarget();
+  const target = await resolveResizeTarget(preferredTarget);
   const normalizedWindow = await ensureNormalWindow(target.window);
 
   if (normalizedWindow.id === undefined) {
@@ -174,17 +264,13 @@ export async function applyViewportResize(rawInput: ResizeInput): Promise<Resize
 
   const windowId = normalizedWindow.id;
   let currentWindowSize = extractWindowSize(normalizedWindow, requested);
-  const firstMetrics = await requestViewportMetrics(target.tabId);
+  await delay(VIEWPORT_SETTLE_DELAY_MS);
+  const firstMetrics = await requestStableViewportMetrics(target.tabId);
 
   if (!firstMetrics) {
-    const fallbackWindow = await updateWindow(windowId, {
-      width: requested.width,
-      height: requested.height,
-    });
-
-    return createFallbackResult(
+    return applyFallbackWindowResize(
+      windowId,
       requested,
-      extractWindowSize(fallbackWindow, requested),
       'viewport metrics unavailable on this page',
     );
   }
@@ -196,14 +282,9 @@ export async function applyViewportResize(rawInput: ResizeInput): Promise<Resize
     reservedWidth > MAX_REASONABLE_RESERVED_WIDTH_PX ||
     reservedHeight > MAX_REASONABLE_RESERVED_HEIGHT_PX
   ) {
-    const fallbackWindow = await updateWindow(windowId, {
-      width: requested.width,
-      height: requested.height,
-    });
-
-    return createFallbackResult(
+    return applyFallbackWindowResize(
+      windowId,
       requested,
-      extractWindowSize(fallbackWindow, requested),
       'detected large docked panel/DevTools offset; close docked panels for precise viewport sizing',
     );
   }
@@ -237,7 +318,7 @@ export async function applyViewportResize(rawInput: ResizeInput): Promise<Resize
     const updatedWindow = await updateWindow(windowId, targetWindowSize);
     currentWindowSize = extractWindowSize(updatedWindow, targetWindowSize);
 
-    const nextMetrics = await requestViewportMetrics(target.tabId);
+    const nextMetrics = await requestStableViewportMetrics(target.tabId);
     if (!nextMetrics) {
       return createFallbackResult(
         requested,
@@ -278,7 +359,7 @@ export async function applyViewportResize(rawInput: ResizeInput): Promise<Resize
     measuredViewport: finalViewport,
     mode: 'calibrated',
     message: withinTolerance
-      ? `Viewport set to ${formatSize(finalViewport)} (target ${formatSize(requested)}).`
-      : `Viewport stopped at ${formatSize(finalViewport)} (target ${formatSize(requested)}). Browser minimum window size or docked panels may block smaller sizes.`,
+      ? 'Resize success.'
+      : `Resize completed with limits. Actual viewport: ${formatSize(finalViewport)}.`,
   };
 }
