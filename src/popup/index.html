@@ -3,86 +3,79 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Viewport Resizer</title>
+    <meta name="color-scheme" content="light dark" />
+    <title>ViewFit</title>
     <link rel="stylesheet" href="./style.css" />
   </head>
   <body>
-    <main class="popup" aria-label="Viewport Resizer">
+    <main class="popup" aria-label="ViewFit">
       <header class="popup-header">
-        <h1 class="popup-title">Viewport Resizer</h1>
-        <p id="popup-subtitle" class="popup-subtitle">Ready for responsive checks</p>
+        <h1 class="popup-title">ViewFit</h1>
       </header>
 
       <form id="resizer-form" class="popup-body">
-        <section class="panel" aria-label="Preset selection">
-          <div class="panel-head">
-            <p class="control-label">Preset Library</p>
-            <button id="remove-preset-button" class="ghost-button ghost-button--danger" type="button" disabled>
-              Remove
-            </button>
-          </div>
-
-          <div id="preset-dropdown" class="preset-dropdown" data-open="false">
-            <button
-              id="preset-trigger"
-              class="preset-trigger"
-              type="button"
-              aria-haspopup="listbox"
-              aria-expanded="false"
-            >
-              <span id="preset-trigger-size" class="preset-trigger-size mono">1366 x 768</span>
-              <span id="preset-trigger-name" class="preset-trigger-name">Laptop</span>
-              <span class="preset-trigger-caret" aria-hidden="true">▾</span>
-            </button>
-
-            <div id="preset-menu" class="preset-menu" role="listbox" aria-label="Preset list"></div>
+        <section class="panel" aria-label="Presets and size">
+          <div id="preset-dropdown" class="preset-list-shell">
+            <div id="preset-menu" class="preset-menu" role="listbox" aria-label="Presets"></div>
           </div>
 
           <select id="preset-select" class="native-select" aria-hidden="true" tabindex="-1"></select>
-        </section>
 
-        <section class="panel" aria-label="Custom size">
           <div class="field-grid">
             <div class="field">
-              <label class="control-label" for="width-input">Width</label>
+              <label class="control-label" for="width-input">W</label>
               <div class="input-wrap">
-                <input id="width-input" class="control-input mono" type="number" min="200" step="1" required />
+                <input
+                  id="width-input"
+                  class="control-input mono"
+                  type="number"
+                  min="200"
+                  step="1"
+                  required
+                  aria-label="Width in pixels"
+                />
                 <span class="input-suffix mono">px</span>
               </div>
             </div>
 
             <div class="field">
-              <label class="control-label" for="height-input">Height</label>
+              <label class="control-label" for="height-input">H</label>
               <div class="input-wrap">
-                <input id="height-input" class="control-input mono" type="number" min="200" step="1" required />
+                <input
+                  id="height-input"
+                  class="control-input mono"
+                  type="number"
+                  min="200"
+                  step="1"
+                  required
+                  aria-label="Height in pixels"
+                />
                 <span class="input-suffix mono">px</span>
               </div>
             </div>
           </div>
-        </section>
 
-        <section class="panel" aria-label="Save custom preset">
-          <label class="control-label" for="preset-name-input">Save Current Size</label>
-          <div class="inline-row">
+          <div class="save-row">
             <input
               id="preset-name-input"
               class="control-input"
               type="text"
               maxlength="40"
-              placeholder="Preset name, e.g. QA Mobile"
+              aria-label="Optional name when saving preset"
             />
             <button id="add-preset-button" class="ghost-button ghost-button--save" type="button">Save</button>
           </div>
-          <p class="panel-hint">Current width and height will be saved to custom presets.</p>
         </section>
-
-        <button id="apply-button" class="apply-button" type="submit" disabled>Apply to Current Window</button>
       </form>
 
       <footer class="popup-footer">
-        <div id="status" class="status status--info" role="status" aria-live="polite">
-          Idle. Select a preset or enter custom dimensions.
-        </div>
+        <div
+          id="status"
+          class="status status--hidden"
+          role="status"
+          aria-live="polite"
+          aria-hidden="true"
+        ></div>
       </footer>
     </main>
 

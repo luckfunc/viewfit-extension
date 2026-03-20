@@ -1,18 +1,11 @@
 export interface PopupElements {
   presetSelect: HTMLSelectElement;
-  presetDropdown: HTMLDivElement;
-  presetTrigger: HTMLButtonElement;
-  presetTriggerSize: HTMLSpanElement;
-  presetTriggerName: HTMLSpanElement;
   presetMenu: HTMLDivElement;
   presetNameInput: HTMLInputElement;
   widthInput: HTMLInputElement;
   heightInput: HTMLInputElement;
   addPresetButton: HTMLButtonElement;
-  removePresetButton: HTMLButtonElement;
-  applyButton: HTMLButtonElement;
   statusElement: HTMLDivElement;
-  subtitleElement: HTMLParagraphElement;
   formElement: HTMLFormElement;
 }
 
@@ -50,16 +43,8 @@ function isHTMLButtonElement(element: HTMLElement): element is HTMLButtonElement
   return element instanceof HTMLButtonElement;
 }
 
-function isHTMLSpanElement(element: HTMLElement): element is HTMLSpanElement {
-  return element instanceof HTMLSpanElement;
-}
-
 function isHTMLInputElement(element: HTMLElement): element is HTMLInputElement {
   return element instanceof HTMLInputElement;
-}
-
-function isHTMLParagraphElement(element: HTMLElement): element is HTMLParagraphElement {
-  return element instanceof HTMLParagraphElement;
 }
 
 function isHTMLFormElement(element: HTMLElement): element is HTMLFormElement {
@@ -69,18 +54,6 @@ function isHTMLFormElement(element: HTMLElement): element is HTMLFormElement {
 export function getPopupElements(): PopupElements {
   return {
     presetSelect: requireTypedElement('preset-select', 'HTMLSelectElement', isHTMLSelectElement),
-    presetDropdown: requireTypedElement('preset-dropdown', 'HTMLDivElement', isHTMLDivElement),
-    presetTrigger: requireTypedElement('preset-trigger', 'HTMLButtonElement', isHTMLButtonElement),
-    presetTriggerSize: requireTypedElement(
-      'preset-trigger-size',
-      'HTMLSpanElement',
-      isHTMLSpanElement,
-    ),
-    presetTriggerName: requireTypedElement(
-      'preset-trigger-name',
-      'HTMLSpanElement',
-      isHTMLSpanElement,
-    ),
     presetMenu: requireTypedElement('preset-menu', 'HTMLDivElement', isHTMLDivElement),
     presetNameInput: requireTypedElement(
       'preset-name-input',
@@ -94,18 +67,7 @@ export function getPopupElements(): PopupElements {
       'HTMLButtonElement',
       isHTMLButtonElement,
     ),
-    removePresetButton: requireTypedElement(
-      'remove-preset-button',
-      'HTMLButtonElement',
-      isHTMLButtonElement,
-    ),
-    applyButton: requireTypedElement('apply-button', 'HTMLButtonElement', isHTMLButtonElement),
     statusElement: requireTypedElement('status', 'HTMLDivElement', isHTMLDivElement),
-    subtitleElement: requireTypedElement(
-      'popup-subtitle',
-      'HTMLParagraphElement',
-      isHTMLParagraphElement,
-    ),
     formElement: requireTypedElement('resizer-form', 'HTMLFormElement', isHTMLFormElement),
   };
 }

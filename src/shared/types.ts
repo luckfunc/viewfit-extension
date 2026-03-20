@@ -1,5 +1,7 @@
 export const MEASURE_VIEWPORT_MESSAGE = 'MEASURE_VIEWPORT';
 export const APPLY_RESIZE_MESSAGE = 'APPLY_RESIZE';
+/** Page console: calibration steps from resize (content script prints). */
+export const VIEWPORT_DEBUG_LOG_MESSAGE = 'VIEWPORT_RESIZER_DEBUG_LOG';
 
 export type CalibrationMode = 'calibrated' | 'fallback';
 export type PopupStatusVariant = 'success' | 'error' | 'info';

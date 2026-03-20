@@ -6,4 +6,5 @@ export const STORAGE_KEYS = {
   customWidth: 'lastCustomWidth',
   customHeight: 'lastCustomHeight',
   customPresets: 'customPresets',
+  recentPresetOrder: 'recentPresetOrder',
 } as const;

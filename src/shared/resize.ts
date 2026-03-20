@@ -1,16 +1,24 @@
 import {
   MEASURE_VIEWPORT_MESSAGE,
+  VIEWPORT_DEBUG_LOG_MESSAGE,
   type ResizeInput,
   type ResizeTarget,
   type ResizeResult,
   type ViewportMetrics,
 } from './types';
+import { VIEWPORT_RESIZE_DEBUG } from './viewport-resize-debug';
 
 const ERROR_TOLERANCE_PX = 2;
 const MAX_CALIBRATION_PASSES = 6;
 const MIN_WINDOW_SIZE_PX = 200;
-const MAX_REASONABLE_RESERVED_WIDTH_PX = 220;
-const MAX_REASONABLE_RESERVED_HEIGHT_PX = 260;
+/** Chrome vertical tabs / wide side UI can exceed ~300px; too low → false fallback and wrong viewport. */
+const MAX_REASONABLE_RESERVED_WIDTH_PX = 520;
+/**
+ * Vertical chrome: tabs row + URL + bookmarks + vertical-tab top band can push
+ * outerHeight − innerHeight well over 400px (real log: 474). Too low → false fallback.
+ * Extremely large values (dock devtools) still calibrate better than raw window resize.
+ */
+const MAX_REASONABLE_RESERVED_HEIGHT_PX = 720;
 const WINDOW_STATE_SETTLE_TIMEOUT_MS = 1600;
 const WINDOW_STATE_POLL_INTERVAL_MS = 80;
 const VIEWPORT_SETTLE_DELAY_MS = 70;
@@ -18,6 +26,27 @@ const MAX_VIEWPORT_MEASURE_ATTEMPTS = 4;
 
 function getRuntimeError(): string | undefined {
   return chrome.runtime.lastError?.message;
+}
+
+function sendDebugLog(
+  tabId: number | undefined,
+  label: string,
+  data: Record<string, unknown>,
+): void {
+  if (!VIEWPORT_RESIZE_DEBUG || tabId === undefined) {
+    return;
+  }
+
+  chrome.tabs.sendMessage(
+    tabId,
+    {
+      type: VIEWPORT_DEBUG_LOG_MESSAGE,
+      payload: { label, ...data },
+    },
+    () => {
+      void chrome.runtime.lastError;
+    },
+  );
 }
 
 function delay(ms: number): Promise<void> {
@@ -237,13 +266,17 @@ async function applyFallbackWindowResize(
   windowId: number,
   requested: ResizeInput,
   reason: string,
+  debugTabId?: number,
 ): Promise<ResizeResult> {
+  sendDebugLog(debugTabId, 'fallback:before-api', { requested, reason });
   const fallbackWindow = await updateWindow(windowId, {
     width: requested.width,
     height: requested.height,
   });
 
-  return createFallbackResult(requested, extractWindowSize(fallbackWindow, requested), reason);
+  const applied = extractWindowSize(fallbackWindow, requested);
+  sendDebugLog(debugTabId, 'fallback:after-api', { appliedWindowFromChromeApi: applied });
+  return createFallbackResult(requested, applied, reason);
 }
 
 export async function applyViewportResize(
@@ -263,32 +296,69 @@ export async function applyViewportResize(
   }
 
   const windowId = normalizedWindow.id;
+  const debugTabId = target.tabId;
   let currentWindowSize = extractWindowSize(normalizedWindow, requested);
+  sendDebugLog(debugTabId, 'resize:start', {
+    requested,
+    windowId,
+    chromeWindowFromApi: currentWindowSize,
+    tabId: debugTabId ?? null,
+  });
+
   await delay(VIEWPORT_SETTLE_DELAY_MS);
   const firstMetrics = await requestStableViewportMetrics(target.tabId);
 
   if (!firstMetrics) {
+    sendDebugLog(debugTabId, 'resize:no-metrics', { requested });
     return applyFallbackWindowResize(
       windowId,
       requested,
       'viewport metrics unavailable on this page',
+      debugTabId,
     );
   }
 
-  const reservedWidth = Math.max(0, currentWindowSize.width - firstMetrics.innerWidth);
-  const reservedHeight = Math.max(0, currentWindowSize.height - firstMetrics.innerHeight);
+  // Use page-reported outer* (same coordinate system as inner*). With vertical tabs,
+  // chrome.windows width/height can disagree with window.outerWidth/outerHeight, which
+  // breaks "API outer + delta" calibration while top tabs often look close enough.
+  const reservedWidth = Math.max(0, firstMetrics.outerWidth - firstMetrics.innerWidth);
+  const reservedHeight = Math.max(0, firstMetrics.outerHeight - firstMetrics.innerHeight);
+
+  sendDebugLog(debugTabId, 'resize:first-metrics', {
+    requested,
+    chromeWindowFromApi: currentWindowSize,
+    pageInner: { w: firstMetrics.innerWidth, h: firstMetrics.innerHeight },
+    pageOuter: { w: firstMetrics.outerWidth, h: firstMetrics.outerHeight },
+    apiVsOuterW: currentWindowSize.width - firstMetrics.outerWidth,
+    apiVsOuterH: currentWindowSize.height - firstMetrics.outerHeight,
+    reservedWidth,
+    reservedHeight,
+    reservedMax: {
+      w: MAX_REASONABLE_RESERVED_WIDTH_PX,
+      h: MAX_REASONABLE_RESERVED_HEIGHT_PX,
+    },
+  });
 
   if (
     reservedWidth > MAX_REASONABLE_RESERVED_WIDTH_PX ||
     reservedHeight > MAX_REASONABLE_RESERVED_HEIGHT_PX
   ) {
+    sendDebugLog(debugTabId, 'resize:reserved-too-large', {
+      reservedWidth,
+      reservedHeight,
+    });
     return applyFallbackWindowResize(
       windowId,
       requested,
-      'detected large docked panel/DevTools offset; close docked panels for precise viewport sizing',
+      'browser chrome is extremely wide or tall (e.g. docked DevTools, huge side panel); close or undock them for precise viewport sizing',
+      debugTabId,
     );
   }
 
+  let outerFromPage: ResizeInput = {
+    width: firstMetrics.outerWidth,
+    height: firstMetrics.outerHeight,
+  };
   let measuredViewport = firstMetrics;
   let lastMeasuredViewport: ResizeInput = {
     width: measuredViewport.innerWidth,
@@ -300,26 +370,46 @@ export async function applyViewportResize(
     const deltaHeight = requested.height - measuredViewport.innerHeight;
 
     if (Math.abs(deltaWidth) <= ERROR_TOLERANCE_PX && Math.abs(deltaHeight) <= ERROR_TOLERANCE_PX) {
+      sendDebugLog(debugTabId, 'calibrate:within-tolerance', { pass, deltaWidth, deltaHeight });
       break;
     }
 
     const targetWindowSize: ResizeInput = {
-      width: clampSize(currentWindowSize.width + deltaWidth),
-      height: clampSize(currentWindowSize.height + deltaHeight),
+      width: clampSize(outerFromPage.width + deltaWidth),
+      height: clampSize(outerFromPage.height + deltaHeight),
     };
 
+    sendDebugLog(debugTabId, 'calibrate:pass', {
+      pass,
+      deltaWidth,
+      deltaHeight,
+      outerFromPage,
+      targetWindowForChromeApi: targetWindowSize,
+    });
+
     if (
-      targetWindowSize.width === currentWindowSize.width &&
-      targetWindowSize.height === currentWindowSize.height
+      targetWindowSize.width === outerFromPage.width &&
+      targetWindowSize.height === outerFromPage.height
     ) {
+      sendDebugLog(debugTabId, 'calibrate:no-api-change', {
+        pass,
+        targetWindowSize,
+        outerFromPage,
+      });
       break;
     }
 
     const updatedWindow = await updateWindow(windowId, targetWindowSize);
     currentWindowSize = extractWindowSize(updatedWindow, targetWindowSize);
 
+    await delay(VIEWPORT_SETTLE_DELAY_MS);
+
     const nextMetrics = await requestStableViewportMetrics(target.tabId);
     if (!nextMetrics) {
+      sendDebugLog(debugTabId, 'calibrate:lost-metrics-after-update', {
+        pass,
+        apiWindow: currentWindowSize,
+      });
       return createFallbackResult(
         requested,
         currentWindowSize,
@@ -327,7 +417,18 @@ export async function applyViewportResize(
       );
     }
 
+    sendDebugLog(debugTabId, 'calibrate:after-update', {
+      pass,
+      apiWindowFromChrome: currentWindowSize,
+      pageInner: { w: nextMetrics.innerWidth, h: nextMetrics.innerHeight },
+      pageOuter: { w: nextMetrics.outerWidth, h: nextMetrics.outerHeight },
+    });
+
     measuredViewport = nextMetrics;
+    outerFromPage = {
+      width: nextMetrics.outerWidth,
+      height: nextMetrics.outerHeight,
+    };
     const currentMeasuredViewport: ResizeInput = {
       width: measuredViewport.innerWidth,
       height: measuredViewport.innerHeight,
@@ -337,6 +438,10 @@ export async function applyViewportResize(
       currentMeasuredViewport.width === lastMeasuredViewport.width &&
       currentMeasuredViewport.height === lastMeasuredViewport.height
     ) {
+      sendDebugLog(debugTabId, 'calibrate:stuck-same-inner', {
+        pass,
+        inner: currentMeasuredViewport,
+      });
       break;
     }
 
@@ -351,6 +456,16 @@ export async function applyViewportResize(
   const widthDiff = Math.abs(requested.width - finalViewport.width);
   const heightDiff = Math.abs(requested.height - finalViewport.height);
   const withinTolerance = widthDiff <= ERROR_TOLERANCE_PX && heightDiff <= ERROR_TOLERANCE_PX;
+
+  sendDebugLog(debugTabId, 'resize:done-calibrated', {
+    requested,
+    finalViewport,
+    widthDiff,
+    heightDiff,
+    withinTolerance,
+    apiAppliedWindow: currentWindowSize,
+    pageOuterFinal: { w: measuredViewport.outerWidth, h: measuredViewport.outerHeight },
+  });
 
   return {
     ok: true,

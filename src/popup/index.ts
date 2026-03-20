@@ -2,7 +2,6 @@ import { DEFAULT_PRESET_ID, PRESETS, findPresetById } from '../shared/presets';
 import { APPLY_RESIZE_MESSAGE } from '../shared/types';
 import type {
   ApplyResizeResponse,
-  PopupStatusVariant,
   ResizeInput,
   ResizeResult,
   ResizeTarget,
@@ -12,35 +11,44 @@ import { MIN_VIEWPORT_SIZE_PX } from './constants';
 import {
   buildCustomPresetLabel,
   createCustomPresetId,
-  isCustomPresetId,
   normalizePresetName,
 } from './custom-presets';
 import { getPopupElements } from './dom';
-import { matchesPresetSearch, normalizePresetSearchQuery, splitPresetLabel } from './preset-utils';
-import { loadPopupStorage, saveCustomPresets, savePopupState } from './storage';
+import { splitPresetLabel } from './preset-utils';
+import { bumpRecentPresetOrder, sortPresetsByRecentOrder } from './recent-presets';
+import {
+  loadPopupStorage,
+  saveCustomPresets,
+  savePopupState,
+  saveRecentPresetOrder,
+} from './storage';
 
 interface PopupState {
   customPresets: SizePreset[];
-  isPresetMenuOpen: boolean;
-  presetSearchQuery: string;
+  recentPresetOrder: string[];
 }
 
 const elements = getPopupElements();
 
 const state: PopupState = {
   customPresets: [],
-  isPresetMenuOpen: false,
-  presetSearchQuery: '',
+  recentPresetOrder: [],
 };
 
-function setSubtitle(text: string): void {
-  elements.subtitleElement.textContent = text;
+let viewportResizeInFlight = false;
+
+function clearStatus(): void {
+  elements.statusElement.textContent = '';
+  elements.statusElement.classList.remove('status--success', 'status--error', 'status--info');
+  elements.statusElement.classList.add('status--hidden');
+  elements.statusElement.setAttribute('aria-hidden', 'true');
 }
 
-function setStatus(variant: PopupStatusVariant, message: string): void {
-  elements.statusElement.classList.remove('status--success', 'status--error', 'status--info');
-  elements.statusElement.classList.add(`status--${variant}`);
+function setErrorStatus(message: string): void {
+  elements.statusElement.classList.remove('status--hidden', 'status--success', 'status--info');
+  elements.statusElement.classList.add('status--error');
   elements.statusElement.textContent = message;
+  elements.statusElement.removeAttribute('aria-hidden');
 }
 
 function parsePositiveInteger(value: string, fallbackValue: number): number {
@@ -63,6 +71,14 @@ function getDefaultPreset(): SizePreset {
 
 function findAnyPresetById(presetId: string): SizePreset | undefined {
   return findPresetById(presetId) ?? state.customPresets.find((preset) => preset.id === presetId);
+}
+
+function pruneRecentPresetOrder(ids: string[]): string[] {
+  const valid = new Set([
+    ...PRESETS.map((preset) => preset.id),
+    ...state.customPresets.map((preset) => preset.id),
+  ]);
+  return ids.filter((id) => valid.has(id));
 }
 
 function getSelectedPresetOrDefault(): SizePreset {
@@ -97,129 +113,18 @@ function readValidatedCustomPresetSize(): ResizeInput | undefined {
   return { width, height };
 }
 
-function updateRemovePresetButtonState(selectedPresetId: string): void {
-  elements.removePresetButton.disabled = !isCustomPresetId(selectedPresetId);
-}
-
-function appendPresetOption(parent: HTMLOptGroupElement, preset: SizePreset): void {
-  const option = document.createElement('option');
-  option.value = preset.id;
-  option.textContent = preset.label;
-  parent.appendChild(option);
-}
-
-function setPresetTriggerDisplay(preset: SizePreset): void {
-  const label = splitPresetLabel(preset);
-  elements.presetTriggerSize.textContent = label.size;
-  elements.presetTriggerName.textContent = label.name || 'Preset';
-}
-
-function getSelectedMenuOption(): HTMLButtonElement | null {
-  const options = elements.presetMenu.querySelectorAll<HTMLButtonElement>('.preset-option');
-  for (const option of options) {
-    if (option.dataset.presetId === elements.presetSelect.value) {
-      return option;
-    }
-  }
-
-  return null;
-}
-
-function focusPresetSearchInput(): void {
-  const searchInput = elements.presetMenu.querySelector<HTMLInputElement>('.preset-search-input');
-  if (!searchInput) {
-    return;
-  }
-
-  searchInput.focus();
-  const cursorPosition = searchInput.value.length;
-  searchInput.setSelectionRange(cursorPosition, cursorPosition);
-}
-
-function createPresetSearchControl(selectedPresetId: string): HTMLDivElement {
-  const wrapper = document.createElement('div');
-  wrapper.className = 'preset-search';
-
-  const input = document.createElement('input');
-  input.type = 'search';
-  input.className = 'preset-search-input';
-  input.placeholder = 'Search size or name';
-  input.value = state.presetSearchQuery;
-  input.autocomplete = 'off';
-  input.spellcheck = false;
-  input.setAttribute('aria-label', 'Search presets');
-
-  input.addEventListener('input', (event) => {
-    const target = event.target as HTMLInputElement;
-    state.presetSearchQuery = target.value;
-    renderPresetMenu(selectedPresetId, true);
-  });
-
-  input.addEventListener('keydown', (event) => {
-    if (event.key === 'Enter') {
-      event.preventDefault();
-      return;
-    }
-
-    if (event.key === 'ArrowDown') {
-      event.preventDefault();
-      const firstOption = elements.presetMenu.querySelector<HTMLButtonElement>('.preset-option');
-      firstOption?.focus();
-      return;
-    }
-
-    if (event.key === 'Escape') {
-      event.stopPropagation();
-      if (!state.presetSearchQuery) {
-        setPresetMenuOpen(false);
-        elements.presetTrigger.focus();
-        return;
-      }
-
-      state.presetSearchQuery = '';
-      renderPresetMenu(selectedPresetId, true);
-    }
-  });
-
-  wrapper.appendChild(input);
-  return wrapper;
-}
-
-function setPresetMenuOpen(open: boolean): void {
-  if (state.isPresetMenuOpen === open) {
-    return;
-  }
-
-  state.isPresetMenuOpen = open;
-  elements.presetDropdown.dataset.open = open ? 'true' : 'false';
-  elements.presetTrigger.setAttribute('aria-expanded', String(open));
-
-  if (open) {
-    focusPresetSearchInput();
-    const selectedOption = getSelectedMenuOption();
-    selectedOption?.scrollIntoView({ block: 'nearest' });
-    return;
-  }
-
-  if (!state.presetSearchQuery) {
-    return;
-  }
-
-  state.presetSearchQuery = '';
-  renderPresetMenu(elements.presetSelect.value);
+function scrollSelectedPresetIntoView(): void {
+  const selected = elements.presetMenu.querySelector<HTMLElement>('.preset-option.is-active');
+  selected?.scrollIntoView({ block: 'nearest' });
 }
 
 function createPresetMenuGroup(
-  label: string,
+  label: string | null,
   presets: SizePreset[],
   selectedId: string,
 ): HTMLDivElement {
   const group = document.createElement('div');
   group.className = 'preset-group';
-
-  const title = document.createElement('div');
-  title.className = 'preset-group-title';
-  title.textContent = label;
 
   const list = document.createElement('div');
   list.className = 'preset-group-list';
@@ -250,66 +155,40 @@ function createPresetMenuGroup(
     list.appendChild(option);
   }
 
-  group.append(title, list);
+  if (label) {
+    const title = document.createElement('div');
+    title.className = 'preset-group-title';
+    title.textContent = label;
+    group.append(title, list);
+  } else {
+    group.append(list);
+  }
+
   return group;
 }
 
-function renderPresetMenu(selectedPresetId: string, keepSearchFocus = false): void {
-  const normalizedQuery = normalizePresetSearchQuery(state.presetSearchQuery);
-  const filteredBuiltIns = PRESETS.filter((preset) => matchesPresetSearch(preset, normalizedQuery));
-  const filteredCustoms = state.customPresets.filter((preset) =>
-    matchesPresetSearch(preset, normalizedQuery),
+function getAllPresetsSorted(): SizePreset[] {
+  return sortPresetsByRecentOrder([...PRESETS, ...state.customPresets], state.recentPresetOrder);
+}
+
+function renderPresetList(selectedPresetId: string): void {
+  elements.presetMenu.textContent = '';
+
+  elements.presetMenu.appendChild(
+    createPresetMenuGroup(null, getAllPresetsSorted(), selectedPresetId),
   );
 
-  elements.presetMenu.textContent = '';
-  elements.presetMenu.appendChild(createPresetSearchControl(selectedPresetId));
-
-  if (filteredBuiltIns.length > 0) {
-    elements.presetMenu.appendChild(
-      createPresetMenuGroup('Built-in', filteredBuiltIns, selectedPresetId),
-    );
-  }
-
-  if (filteredCustoms.length > 0) {
-    elements.presetMenu.appendChild(
-      createPresetMenuGroup('Custom', filteredCustoms, selectedPresetId),
-    );
-  }
-
-  if (filteredBuiltIns.length === 0 && filteredCustoms.length === 0) {
-    const emptyState = document.createElement('div');
-    emptyState.className = 'preset-empty';
-    emptyState.textContent = 'No preset matches your search.';
-    elements.presetMenu.appendChild(emptyState);
-  }
-
-  const selectedPreset = findAnyPresetById(selectedPresetId);
-  if (selectedPreset) {
-    setPresetTriggerDisplay(selectedPreset);
-  }
-
-  if (keepSearchFocus && state.isPresetMenuOpen) {
-    focusPresetSearchInput();
-  }
+  scrollSelectedPresetIntoView();
 }
 
 function renderPresetOptions(selectedPresetId?: string): void {
   elements.presetSelect.textContent = '';
 
-  const builtInGroup = document.createElement('optgroup');
-  builtInGroup.label = 'Built-in';
-  PRESETS.forEach((preset) => {
-    appendPresetOption(builtInGroup, preset);
-  });
-  elements.presetSelect.appendChild(builtInGroup);
-
-  if (state.customPresets.length > 0) {
-    const customGroup = document.createElement('optgroup');
-    customGroup.label = 'Custom';
-    state.customPresets.forEach((preset) => {
-      appendPresetOption(customGroup, preset);
-    });
-    elements.presetSelect.appendChild(customGroup);
+  for (const preset of getAllPresetsSorted()) {
+    const option = document.createElement('option');
+    option.value = preset.id;
+    option.textContent = preset.label;
+    elements.presetSelect.appendChild(option);
   }
 
   const fallbackPreset = getDefaultPreset();
@@ -317,8 +196,7 @@ function renderPresetOptions(selectedPresetId?: string): void {
     selectedPresetId && findAnyPresetById(selectedPresetId) ? selectedPresetId : fallbackPreset.id;
 
   elements.presetSelect.value = resolvedSelection;
-  updateRemovePresetButtonState(resolvedSelection);
-  renderPresetMenu(resolvedSelection);
+  renderPresetList(resolvedSelection);
 }
 
 function applyPresetToInputs(preset: SizePreset): void {
@@ -328,19 +206,20 @@ function applyPresetToInputs(preset: SizePreset): void {
 
 function reportStorageError(error: unknown): void {
   const message = error instanceof Error ? error.message : 'Unexpected storage error.';
-  setStatus('error', `Storage error: ${message}`);
+  setErrorStatus(`Storage error: ${message}`);
+}
+
+function touchRecentPreset(presetId: string): void {
+  state.recentPresetOrder = bumpRecentPresetOrder(state.recentPresetOrder, presetId);
+  void saveRecentPresetOrder(state.recentPresetOrder).catch(reportStorageError);
 }
 
 function persistState(size: ResizeInput): void {
   void savePopupState(elements.presetSelect.value, size).catch(reportStorageError);
 }
 
-function renderResult(result: ResizeResult): void {
-  const variant: PopupStatusVariant = result.mode === 'fallback' ? 'info' : 'success';
-  const modeLabel = result.mode === 'fallback' ? 'Mode: fallback' : 'Mode: calibrated';
-
-  setSubtitle(modeLabel);
-  setStatus(variant, result.message);
+function renderResult(_result: ResizeResult): void {
+  clearStatus();
 }
 
 function getRuntimeErrorMessage(): string | undefined {
@@ -425,6 +304,7 @@ async function loadInitialState(): Promise<void> {
   try {
     const savedValues = await loadPopupStorage();
     state.customPresets = savedValues.customPresets;
+    state.recentPresetOrder = pruneRecentPresetOrder(savedValues.recentPresetOrder);
 
     const savedPresetId = savedValues.presetId ?? defaultPreset.id;
     renderPresetOptions(savedPresetId);
@@ -442,26 +322,18 @@ async function loadInitialState(): Promise<void> {
   }
 }
 
-function handlePresetChange(): void {
-  const selectedPreset = findAnyPresetById(elements.presetSelect.value);
-  if (!selectedPreset) {
-    return;
-  }
-
-  applyPresetToInputs(selectedPreset);
-  renderPresetMenu(selectedPreset.id);
-  persistState({ width: selectedPreset.width, height: selectedPreset.height });
-  updateRemovePresetButtonState(selectedPreset.id);
-  setSubtitle(`Preset: ${selectedPreset.label}`);
-  setStatus('info', 'Preset loaded. Press Apply to resize window.');
+function syncPresetSelection(preset: SizePreset): void {
+  touchRecentPreset(preset.id);
+  elements.presetSelect.value = preset.id;
+  applyPresetToInputs(preset);
+  renderPresetList(preset.id);
+  persistState({ width: preset.width, height: preset.height });
 }
 
 async function handleAddPreset(): Promise<void> {
   const size = readValidatedCustomPresetSize();
   if (!size) {
-    setSubtitle('Invalid preset size');
-    setStatus(
-      'error',
+    setErrorStatus(
       `Width and height must be valid numbers and at least ${MIN_VIEWPORT_SIZE_PX}px.`,
     );
     return;
@@ -481,11 +353,11 @@ async function handleAddPreset(): Promise<void> {
     );
 
     if (duplicate) {
+      touchRecentPreset(duplicate.id);
       renderPresetOptions(duplicate.id);
       applyPresetToInputs(duplicate);
       await savePopupState(duplicate.id, size);
-      setSubtitle(`Preset exists: ${duplicate.label}`);
-      setStatus('info', 'Same custom preset already exists. Selected it for you.');
+      clearStatus();
       return;
     }
 
@@ -499,45 +371,15 @@ async function handleAddPreset(): Promise<void> {
     const nextCustomPresets = [...state.customPresets, customPreset];
     await saveCustomPresets(nextCustomPresets);
     state.customPresets = nextCustomPresets;
+    touchRecentPreset(customPreset.id);
     renderPresetOptions(customPreset.id);
     applyPresetToInputs(customPreset);
     await savePopupState(customPreset.id, size);
 
     elements.presetNameInput.value = '';
-    setSubtitle(`Preset saved: ${customPreset.label}`);
-    setStatus('success', 'Custom preset saved.');
+    clearStatus();
   } finally {
     elements.addPresetButton.disabled = false;
-  }
-}
-
-async function handleRemoveSelectedPreset(): Promise<void> {
-  const selectedId = elements.presetSelect.value;
-  if (!isCustomPresetId(selectedId)) {
-    setStatus('info', 'Built-in presets cannot be removed.');
-    return;
-  }
-
-  elements.removePresetButton.disabled = true;
-
-  try {
-    const removedPreset = state.customPresets.find((preset) => preset.id === selectedId);
-    const nextCustomPresets = state.customPresets.filter((preset) => preset.id !== selectedId);
-    await saveCustomPresets(nextCustomPresets);
-    state.customPresets = nextCustomPresets;
-
-    const fallbackPreset = getDefaultPreset();
-    await savePopupState(fallbackPreset.id, {
-      width: fallbackPreset.width,
-      height: fallbackPreset.height,
-    });
-    renderPresetOptions(fallbackPreset.id);
-    applyPresetToInputs(fallbackPreset);
-
-    setSubtitle(removedPreset ? `Removed: ${removedPreset.label}` : 'Removed custom preset');
-    setStatus('info', 'Custom preset removed.');
-  } finally {
-    updateRemovePresetButtonState(elements.presetSelect.value);
   }
 }
 
@@ -549,56 +391,25 @@ function handlePresetMenuClick(event: MouseEvent): void {
   }
 
   const presetId = option.dataset.presetId;
-  if (!presetId || elements.presetSelect.value === presetId) {
-    setPresetMenuOpen(false);
+  if (!presetId) {
     return;
   }
 
-  elements.presetSelect.value = presetId;
-  handlePresetChange();
-  setPresetMenuOpen(false);
+  const preset = findAnyPresetById(presetId);
+  if (!preset) {
+    return;
+  }
+
+  syncPresetSelection(preset);
+  void applyViewportResize();
 }
 
-function bindPresetDropdownEvents(): void {
-  elements.presetTrigger.addEventListener('click', () => {
-    setPresetMenuOpen(!state.isPresetMenuOpen);
-  });
-
-  elements.presetTrigger.addEventListener('keydown', (event) => {
-    if (event.key === 'Enter' || event.key === ' ' || event.key === 'ArrowDown') {
-      event.preventDefault();
-      setPresetMenuOpen(true);
-      return;
-    }
-
-    if (event.key === 'Escape') {
-      event.preventDefault();
-      setPresetMenuOpen(false);
-    }
-  });
-
+function bindPresetListEvents(): void {
   elements.presetMenu.addEventListener('click', handlePresetMenuClick);
-
-  document.addEventListener('click', (event) => {
-    const target = event.target as Node | null;
-    if (!target || elements.presetDropdown.contains(target)) {
-      return;
-    }
-
-    setPresetMenuOpen(false);
-  });
-
-  document.addEventListener('keydown', (event) => {
-    if (event.key === 'Escape' && state.isPresetMenuOpen) {
-      setPresetMenuOpen(false);
-    }
-  });
 }
 
-async function handleApply(event: Event): Promise<void> {
-  event.preventDefault();
-
-  if (elements.applyButton.disabled) {
+async function applyViewportResize(): Promise<void> {
+  if (viewportResizeInFlight) {
     return;
   }
 
@@ -606,9 +417,7 @@ async function handleApply(event: Event): Promise<void> {
   elements.widthInput.value = String(requestedSize.width);
   elements.heightInput.value = String(requestedSize.height);
 
-  elements.applyButton.disabled = true;
-  setSubtitle('Applying viewport target');
-  setStatus('info', 'Resizing current window...');
+  viewportResizeInFlight = true;
 
   try {
     const target = await queryPopupTarget();
@@ -617,40 +426,28 @@ async function handleApply(event: Event): Promise<void> {
     renderResult(result);
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unexpected resize error.';
-    setSubtitle('Mode: failed');
-    setStatus('error', message);
+    setErrorStatus(message);
   } finally {
-    elements.applyButton.disabled = false;
+    viewportResizeInFlight = false;
   }
 }
 
 async function initPopup(): Promise<void> {
   elements.formElement.addEventListener('submit', (event) => {
-    void handleApply(event).catch((error) => {
-      const message = error instanceof Error ? error.message : 'Unexpected popup error.';
-      setStatus('error', message);
-    });
+    event.preventDefault();
   });
 
   await loadInitialState();
-  bindPresetDropdownEvents();
+  bindPresetListEvents();
 
   elements.addPresetButton.addEventListener('click', () => {
     void handleAddPreset().catch((error) => {
       reportStorageError(error);
     });
   });
-
-  elements.removePresetButton.addEventListener('click', () => {
-    void handleRemoveSelectedPreset().catch((error) => {
-      reportStorageError(error);
-    });
-  });
-
-  elements.applyButton.disabled = false;
 }
 
 void initPopup().catch((error) => {
   const message = error instanceof Error ? error.message : 'Unexpected popup initialization error.';
-  setStatus('error', message);
+  setErrorStatus(message);
 });

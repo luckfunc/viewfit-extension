@@ -7,6 +7,7 @@ const STORAGE_KEY_LIST = [
   STORAGE_KEYS.customWidth,
   STORAGE_KEYS.customHeight,
   STORAGE_KEYS.customPresets,
+  STORAGE_KEYS.recentPresetOrder,
 ] as const;
 
 export interface PopupStorageSnapshot {
@@ -14,6 +15,7 @@ export interface PopupStorageSnapshot {
   customWidth?: number;
   customHeight?: number;
   customPresets: SizePreset[];
+  recentPresetOrder: string[];
 }
 
 function readLocalStorageValue(key: string): unknown {
@@ -107,17 +109,46 @@ function readStoredDimension(value: unknown): number | undefined {
   return Math.round(value);
 }
 
+function normalizeRecentPresetOrder(value: unknown): string[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value.filter((item): item is string => typeof item === 'string' && item.length > 0);
+}
+
+function mergeCustomPresetSources(chromeList: SizePreset[], localList: SizePreset[]): SizePreset[] {
+  const seen = new Set<string>();
+  const result: SizePreset[] = [];
+  for (const preset of chromeList) {
+    if (!seen.has(preset.id)) {
+      seen.add(preset.id);
+      result.push(preset);
+    }
+  }
+  for (const preset of localList) {
+    if (!seen.has(preset.id)) {
+      seen.add(preset.id);
+      result.push(preset);
+    }
+  }
+  return result;
+}
+
 export async function loadPopupStorage(): Promise<PopupStorageSnapshot> {
   const localValues: Record<string, unknown> = {
     [STORAGE_KEYS.presetId]: readLocalStorageValue(STORAGE_KEYS.presetId),
     [STORAGE_KEYS.customWidth]: readLocalStorageValue(STORAGE_KEYS.customWidth),
     [STORAGE_KEYS.customHeight]: readLocalStorageValue(STORAGE_KEYS.customHeight),
     [STORAGE_KEYS.customPresets]: readLocalStorageValue(STORAGE_KEYS.customPresets),
+    [STORAGE_KEYS.recentPresetOrder]: readLocalStorageValue(STORAGE_KEYS.recentPresetOrder),
   };
 
   const savedValues = await readFromStorage(STORAGE_KEY_LIST);
   const chromeCustomPresets = normalizeCustomPresets(savedValues[STORAGE_KEYS.customPresets]);
   const localCustomPresets = normalizeCustomPresets(localValues[STORAGE_KEYS.customPresets]);
+  const chromeRecentOrder = normalizeRecentPresetOrder(savedValues[STORAGE_KEYS.recentPresetOrder]);
+  const localRecentOrder = normalizeRecentPresetOrder(localValues[STORAGE_KEYS.recentPresetOrder]);
 
   return {
     presetId:
@@ -129,7 +160,8 @@ export async function loadPopupStorage(): Promise<PopupStorageSnapshot> {
     customHeight:
       readStoredDimension(savedValues[STORAGE_KEYS.customHeight]) ??
       readStoredDimension(localValues[STORAGE_KEYS.customHeight]),
-    customPresets: chromeCustomPresets.length > 0 ? chromeCustomPresets : localCustomPresets,
+    customPresets: mergeCustomPresetSources(chromeCustomPresets, localCustomPresets),
+    recentPresetOrder: chromeRecentOrder.length > 0 ? chromeRecentOrder : localRecentOrder,
   };
 }
 
@@ -147,6 +179,15 @@ export function savePopupState(presetId: string, size: ResizeInput): Promise<voi
 export function saveCustomPresets(customPresets: SizePreset[]): Promise<void> {
   const values: Record<string, unknown> = {
     [STORAGE_KEYS.customPresets]: customPresets,
+  };
+
+  writeToLocalStorage(values);
+  return writeToStorage(values);
+}
+
+export function saveRecentPresetOrder(recentPresetOrder: string[]): Promise<void> {
+  const values: Record<string, unknown> = {
+    [STORAGE_KEYS.recentPresetOrder]: recentPresetOrder,
   };
 
   writeToLocalStorage(values);

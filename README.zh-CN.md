@@ -1,4 +1,4 @@
-# Viewport Resizer Extension
+# ViewFit 扩展
 
 一个用于响应式调试的 Chrome/Edge（MV3）扩展。它会把当前浏览器窗口调整到目标视口尺寸，并执行校准流程以尽量接近目标值。
 

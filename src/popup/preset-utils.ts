@@ -14,17 +14,3 @@ export function splitPresetLabel(preset: SizePreset): PresetLabelParts {
 
   return { size, name: preset.label };
 }
-
-export function normalizePresetSearchQuery(value: string): string {
-  return value.trim().toLowerCase();
-}
-
-export function matchesPresetSearch(preset: SizePreset, query: string): boolean {
-  if (!query) {
-    return true;
-  }
-
-  const parts = splitPresetLabel(preset);
-  const searchableText = `${parts.size} ${parts.name} ${preset.label}`.toLowerCase();
-  return searchableText.includes(query);
-}
