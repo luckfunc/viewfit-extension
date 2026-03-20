@@ -8,7 +8,7 @@
 
 技术上，ViewFit 是一款 Chrome / Edge（Manifest V3）扩展：将当前浏览器窗口调整到目标视口尺寸，并通过校准尽量接近你设定的宽高。
 
-![ViewFit 预览（商店 Marquee 风格）](./docs/images/viewfit-preview.png)
+![ViewFit 预览（中文版商店 Marquee，1400×560）](./docs/images/viewfit-preview.png)
 
 ## 功能
 

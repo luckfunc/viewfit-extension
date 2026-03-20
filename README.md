@@ -9,7 +9,7 @@ A viewport sizing tool for developers and designers. Rich presets, custom dimens
 
 Under the hood, ViewFit is a Chrome/Edge (MV3) extension: it resizes the current browser window toward your target viewport size and runs calibration to get closer to the requested result.
 
-![ViewFit preview (store marquee style)](./docs/images/viewfit-preview.png)
+![ViewFit preview — English store marquee (1400×560)](./docs/images/viewfit-marquee-1400x560-en.png)
 
 ## Features
 
