@@ -102,6 +102,9 @@ public/build/
 # Mac files
 .DS_Store
 
+# Local reference assets (screenshots, exports)
+output/
+
 # JetBrains IDEs
 .idea/
 

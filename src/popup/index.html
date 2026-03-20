@@ -10,7 +10,36 @@
   <body>
     <main class="popup" aria-label="ViewFit">
       <header class="popup-header">
-        <h1 class="popup-title">ViewFit</h1>
+        <h1 class="popup-brand" title="ViewFit">
+          <svg
+            class="popup-brand-mark"
+            width="20"
+            height="20"
+            viewBox="0 0 48 48"
+            fill="none"
+            xmlns="http://www.w3.org/2000/svg"
+            aria-hidden="true"
+          >
+            <path
+              d="M42 18V40C42 41.1046 41.1046 42 40 42H8C6.89543 42 6 41.1046 6 40V18"
+              stroke="currentColor"
+              stroke-width="4"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            />
+            <path
+              d="M6 8C6 6.89543 6.89543 6 8 6H40C41.1046 6 42 6.89543 42 8V18H6V8Z"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="4"
+              stroke-linejoin="round"
+            />
+            <circle cx="12" cy="12" r="2" fill="currentColor" />
+            <circle cx="18" cy="12" r="2" fill="currentColor" />
+            <circle cx="24" cy="12" r="2" fill="currentColor" />
+          </svg>
+          <span class="sr-only">ViewFit</span>
+        </h1>
       </header>
 
       <form id="resizer-form" class="popup-body">
@@ -23,7 +52,7 @@
 
           <div class="field-grid">
             <div class="field">
-              <label class="control-label" for="width-input">W</label>
+              <label class="control-label" for="width-input">Width</label>
               <div class="input-wrap">
                 <input
                   id="width-input"
@@ -39,7 +68,7 @@
             </div>
 
             <div class="field">
-              <label class="control-label" for="height-input">H</label>
+              <label class="control-label" for="height-input">Height</label>
               <div class="input-wrap">
                 <input
                   id="height-input"
@@ -55,15 +84,19 @@
             </div>
           </div>
 
-          <div class="save-row">
+          <div class="save-block">
+            <label class="control-label" for="preset-name-input">Save as preset</label>
             <input
               id="preset-name-input"
-              class="control-input"
+              class="control-input control-input--block"
               type="text"
               maxlength="40"
+              placeholder="Name (optional)"
               aria-label="Optional name when saving preset"
             />
-            <button id="add-preset-button" class="ghost-button ghost-button--save" type="button">Save</button>
+            <div class="form-actions">
+              <button id="add-preset-button" class="ghost-button ghost-button--save" type="button">Save</button>
+            </div>
           </div>
         </section>
       </form>
