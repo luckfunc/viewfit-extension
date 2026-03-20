@@ -2,7 +2,11 @@
 
 # ViewFit 扩展
 
-一款用于响应式测试的 Chrome / Edge（Manifest V3）扩展：将当前浏览器窗口调整到目标视口尺寸，并通过校准尽量接近你设定的宽高。
+> **一键切换分辨率，响应式设计从未如此简单。**
+
+专为开发者与设计师打造的视口调整工具。内置丰富预设，支持自定义尺寸，让多端适配测试快人一步。
+
+技术上，ViewFit 是一款 Chrome / Edge（Manifest V3）扩展：将当前浏览器窗口调整到目标视口尺寸，并通过校准尽量接近你设定的宽高。
 
 ![ViewFit 预览（商店 Marquee 风格）](./docs/images/viewfit-preview.png)
 

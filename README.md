@@ -2,7 +2,12 @@
 
 # ViewFit Extension
 
-A Chrome/Edge (MV3) extension for responsive testing. It resizes the current browser window to a target viewport size and runs calibration to get closer to the requested result.
+> **Switch resolutions in one click.**  
+> **Responsive design has never been this straightforward.**
+
+A viewport sizing tool for developers and designers. Rich presets, custom dimensions when you need them, and a faster loop for cross-device layout checks.
+
+Under the hood, ViewFit is a Chrome/Edge (MV3) extension: it resizes the current browser window toward your target viewport size and runs calibration to get closer to the requested result.
 
 ![ViewFit preview (store marquee style)](./docs/images/viewfit-preview.png)
 
