@@ -2,6 +2,8 @@
 
 A Chrome/Edge (MV3) extension for responsive testing. It resizes the current browser window to a target viewport size and runs calibration to get closer to the requested result.
 
+![ViewFit preview (store marquee style)](./docs/images/viewfit-preview.png)
+
 ## Features
 
 - Built-in preset library for mobile/tablet/desktop sizes
