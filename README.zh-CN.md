@@ -46,12 +46,3 @@ pnpm run build
 3. 开启「开发者模式」
 4. 点击「加载已解压的扩展程序」
 5. 选择本仓库的 `dist` 目录
-
-## 字体
-
-弹窗从以下路径加载字体：
-
-- `public/fonts/ibm-plex-sans-var.woff2`
-- `public/fonts/jetbrains-mono-var.woff2`
-
-可自行替换为其他字体文件。

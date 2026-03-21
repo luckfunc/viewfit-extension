@@ -47,12 +47,3 @@ Useful commands:
 3. Enable `Developer mode`
 4. Click `Load unpacked`
 5. Select the `dist` folder
-
-## Fonts
-
-Popup fonts are loaded from:
-
-- `public/fonts/ibm-plex-sans-var.woff2`
-- `public/fonts/jetbrains-mono-var.woff2`
-
-You can replace these files with your preferred font binaries.
