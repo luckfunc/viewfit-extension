@@ -5,7 +5,7 @@
  */
 const MEASURE_VIEWPORT_MESSAGE = 'MEASURE_VIEWPORT';
 const VIEWPORT_DEBUG_LOG_MESSAGE = 'VIEWPORT_RESIZER_DEBUG_LOG';
-const VIEWPORT_RESIZE_DEBUG = true;
+const VIEWPORT_RESIZE_DEBUG = false;
 
 function snapshotViewportForLog(): Record<string, unknown> {
   const vv = window.visualViewport;
