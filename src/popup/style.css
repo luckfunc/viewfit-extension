@@ -496,10 +496,14 @@ body::-webkit-scrollbar-thumb:hover,
 }
 
 .preset-option:focus-visible,
-.control-input:focus-visible,
 .ghost-button:focus-visible {
   outline: 1px solid var(--focus-ring);
   outline-offset: 1px;
+}
+
+.control-input:focus-visible {
+  border-color: var(--focus-ring);
+  outline: none;
 }
 
 .popup-footer:has(.status--hidden) {
