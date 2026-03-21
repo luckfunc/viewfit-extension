@@ -11,6 +11,7 @@ import { MIN_VIEWPORT_SIZE_PX } from './constants';
 import {
   buildCustomPresetLabel,
   createCustomPresetId,
+  isCustomPresetId,
   normalizePresetName,
 } from './custom-presets';
 import { getPopupElements } from './dom';
@@ -130,6 +131,9 @@ function createPresetMenuGroup(
   list.className = 'preset-group-list';
 
   for (const preset of presets) {
+    const row = document.createElement('div');
+    row.className = 'preset-option-row';
+
     const option = document.createElement('button');
     option.type = 'button';
     option.className = 'preset-option';
@@ -138,6 +142,7 @@ function createPresetMenuGroup(
     option.setAttribute('aria-selected', String(preset.id === selectedId));
 
     if (preset.id === selectedId) {
+      row.classList.add('is-active');
       option.classList.add('is-active');
     }
 
@@ -152,7 +157,21 @@ function createPresetMenuGroup(
     name.textContent = parts.name || 'Preset';
 
     option.append(size, name);
-    list.appendChild(option);
+    row.appendChild(option);
+
+    if (isCustomPresetId(preset.id)) {
+      row.classList.add('preset-option-row--custom');
+
+      const removeButton = document.createElement('button');
+      removeButton.type = 'button';
+      removeButton.className = 'preset-option-remove';
+      removeButton.dataset.presetId = preset.id;
+      removeButton.setAttribute('aria-label', `Delete preset ${preset.label}`);
+      removeButton.appendChild(createPresetRemoveIcon());
+      row.appendChild(removeButton);
+    }
+
+    list.appendChild(row);
   }
 
   if (label) {
@@ -165,6 +184,25 @@ function createPresetMenuGroup(
   }
 
   return group;
+}
+
+function createPresetRemoveIcon(): SVGSVGElement {
+  const svgNamespace = 'http://www.w3.org/2000/svg';
+  const icon = document.createElementNS(svgNamespace, 'svg');
+  icon.setAttribute('viewBox', '0 0 16 16');
+  icon.setAttribute('width', '16');
+  icon.setAttribute('height', '16');
+  icon.setAttribute('fill', 'currentColor');
+  icon.setAttribute('aria-hidden', 'true');
+
+  const path = document.createElementNS(svgNamespace, 'path');
+  path.setAttribute(
+    'd',
+    'M11 1.75V3h2.25a.75.75 0 0 1 0 1.5H2.75a.75.75 0 0 1 0-1.5H5V1.75C5 .784 5.784 0 6.75 0h2.5C10.216 0 11 .784 11 1.75ZM4.496 6.675l.66 6.6a.25.25 0 0 0 .249.225h5.19a.25.25 0 0 0 .249-.225l.66-6.6a.75.75 0 0 1 1.492.149l-.66 6.6A1.748 1.748 0 0 1 10.595 15h-5.19a1.75 1.75 0 0 1-1.741-1.575l-.66-6.6a.75.75 0 1 1 1.492-.15ZM6.5 1.75V3h3V1.75a.25.25 0 0 0-.25-.25h-2.5a.25.25 0 0 0-.25.25Z',
+  );
+
+  icon.appendChild(path);
+  return icon;
 }
 
 function getAllPresetsSorted(): SizePreset[] {
@@ -383,8 +421,53 @@ async function handleAddPreset(): Promise<void> {
   }
 }
 
+async function handleRemovePreset(presetId: string): Promise<void> {
+  if (!isCustomPresetId(presetId)) {
+    return;
+  }
+
+  if (!state.customPresets.some((candidate) => candidate.id === presetId)) {
+    return;
+  }
+
+  const selectedPresetId = elements.presetSelect.value;
+  const removedSelectedPreset = selectedPresetId === presetId;
+  const nextCustomPresets = state.customPresets.filter((candidate) => candidate.id !== presetId);
+  const nextRecentPresetOrder = state.recentPresetOrder.filter((id) => id !== presetId);
+
+  await saveCustomPresets(nextCustomPresets);
+  await saveRecentPresetOrder(nextRecentPresetOrder);
+
+  state.customPresets = nextCustomPresets;
+  state.recentPresetOrder = nextRecentPresetOrder;
+
+  const fallbackPreset = getAllPresetsSorted()[0] ?? getDefaultPreset();
+  renderPresetOptions(removedSelectedPreset ? fallbackPreset.id : selectedPresetId);
+
+  if (removedSelectedPreset) {
+    const nextPreset = getSelectedPresetOrDefault();
+    applyPresetToInputs(nextPreset);
+    await savePopupState(nextPreset.id, { width: nextPreset.width, height: nextPreset.height });
+  }
+
+  clearStatus();
+}
+
 function handlePresetMenuClick(event: MouseEvent): void {
   const target = event.target as HTMLElement;
+  const removeButton = target.closest<HTMLButtonElement>('.preset-option-remove');
+  if (removeButton) {
+    const presetId = removeButton.dataset.presetId;
+    if (!presetId) {
+      return;
+    }
+
+    void handleRemovePreset(presetId).catch((error) => {
+      reportStorageError(error);
+    });
+    return;
+  }
+
   const option = target.closest<HTMLButtonElement>('.preset-option');
   if (!option) {
     return;
